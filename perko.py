@@ -1,4 +1,5 @@
 import sys
+from email.utils import collapse_rfc2231_value
 from typing import final
 
 from PyQt5 import QtWidgets
@@ -15,17 +16,12 @@ import numpy as np
 from percolation import SquareEdge, SquareSite, TriangleEdge, TriangleSite, HexagonEdge, HexagonSite
 
 
-##TODO : faire des raccourcis pour la solution, mettre un input manuel pour la taille, faire une fenetre d'attente si trop long
-
-#TODO mettre bas droit en prio sur triangle site, +1 sur hexa site
-
-
 class Tab(QDialog):
     def __init__(self):
         super().__init__()
-        self.setGeometry(20, 50, 500, 1000)
+        self.setGeometry(10, 25, 650, 1040)
         self.setWindowTitle("Perko")
-        #self.setWindowIcon(QIcon("logo.png"))
+        #self.setWindowIcon(QIcon("logo.png")) pour éventuellement mettre un logo
         layout = QVBoxLayout()
         tab_widget = QTabWidget()
         tab_widget.addTab(TabSimulateur(), "Simulateur de percolation")
@@ -46,23 +42,69 @@ class TabSimulateur(QWidget):
         self.color_close = (220, 220, 220)
         self.color_path = (255, 0, 0)
         self.proba = 0
-        self.limit_input = 1
+        self.mode = 1
         self.probleme = None
 
         #Fonctions
-        def limit_set(x):
+        def mode_set(x): #Permet de changer le mode de percolation, et limite la taille de certains modes par site pour éviter de prendre trop de temps
             radio_button = self.sender()
             if radio_button.isChecked():
                 if isinstance(x, int):
-                    self.limit_input = x
-                    print(self.limit_input)
+                    self.mode = x
+                    print(self.mode)
+                    if x == 3:
+                        limit_number(15)
+                    elif x ==5:
+                        limit_number(25)
+                    else:
+                        limit_number(100)
 
-        def proba_set(x):
-            self.proba = x
+
+        def proba_set(x): #Permet de changer la probabilité à la main et de modifier les thèmes de couleur avec un mot clé
+            if x != "" and x[0] == 0 and x[-1] in {"0","1","2","3","4","5","6","7","8","9","."} and len(x) > 2: #la probabilité doit démarrer par un zéro et ne contenir que des chiffres ou un point
+                x = float(x)
+                self.proba = x
+                print(x)
+                self.slider_proba.setValue(int(x*100))
+            elif x == "forest": #thème spécial forêt
+                print('ok forest')
+                col1 = (150,110,45)
+                col2 = (170,255,0)
+                col3 = (255,0,0)
+                self.color_close = col1
+                self.color_open = col2
+                self.color_path = col3
+                start_color(self.color_close_label,col1)
+                start_color(self.color_open_label,col2)
+                start_color(self.color_path_label,col3)
+            elif x == "multi": #thème multicolore
+                print('ok multi')
+                col1 = (255,51,228)
+                col2 = (255,218,32)
+                col3 = (0,251,255)
+                self.color_close = col1
+                self.color_open = col2
+                self.color_path = col3
+                start_color(self.color_close_label,col1)
+                start_color(self.color_open_label,col2)
+                start_color(self.color_path_label,col3)
+            elif x == "water": #thème eau qui coule
+                print('ok water')
+                col1 = (196,209,227)
+                col2 = (37,94,177)
+                col3 = (255,0,0)
+                self.color_close = col1
+                self.color_open = col2
+                self.color_path = col3
+                start_color(self.color_close_label,col1)
+                start_color(self.color_open_label,col2)
+                start_color(self.color_path_label,col3)
+
+        def limit_number(x): #Permet de changer la taille
             print(x)
-            self.slider.setValue(int(x * 100))
+            self.slider_width.setMaximum(int(x/5)) #La taille est un multiple de 5 pour faciliter le tout
 
-        def simu(type, proba, taille, largeur, col1, col2, col3):
+        def simu(type, proba, taille, largeur, col1, col2, col3): #Permet de générer une instance en fon ction du mode
             print(np.random.get_state())
             with Image.open("hopper_test.jpg") as im:
                 if type == 1:
@@ -84,20 +126,20 @@ class TabSimulateur(QWidget):
                 display()
                 res2 = self.probleme.sol_display()
                 res2.save("res2.jpg")
-                # self.probleme.display()
+                #On sauvegarde déjà les 2 images (avec et sans solution) pour pouvoir les afficher sans chargement
 
-        def display():
+        def display(): #Génère une image et l'affiche dans le cadre de l'image
             self.pixmap = QPixmap("res.jpg")
             self.img_label.setPixmap(self.pixmap)
             self.show()
-            # TODO
 
-        def sol_display():
+        def sol_display(): #Génère l'image de la solution et l'affiche dans le cadre
             self.pixmap = QPixmap("res2.jpg")
             self.img_label.setPixmap(self.pixmap)
             print(self.probleme.path)
             self.show()
 
+        #Différentes fonctions pour changer uniformément les styles des boutons
         def change_radio_style(radio):
             radio.setStyleSheet("QRadioButton"
                                         "{"
@@ -117,15 +159,11 @@ class TabSimulateur(QWidget):
                                 "border : 20px solid black;"
                                 "font : 2px Arial;"
                                 "}")
-
+            #Ici on change aussi les rectangles de couleurs à coté des boutons
             label.setText("")
-
             graphic = QGraphicsColorizeEffect(self)
-
             graphic.setColor(color)
-
             label.setGraphicsEffect(graphic)
-
             col = (color.red(), color.green(), color.blue())
             if to_change == 1:
                 self.color_close = col
@@ -134,7 +172,8 @@ class TabSimulateur(QWidget):
             elif to_change == 3:
                 self.color_path = col
 
-        def start_color(label, color):
+
+        def start_color(label, color): #Permet de changer les couleurs sans passer par le picker, au début et lors des changements de thème
             label.setStyleSheet("QLabel"
                                 "{"
                                 "border : 20px solid black;"
@@ -202,22 +241,22 @@ class TabSimulateur(QWidget):
         #Partie boutons "radio" pour choisir le modèle
         self.carre_site = QRadioButton("CARRÉ PAR SITE")
         self.carre_site.setChecked(True)
-        self.carre_site.toggled.connect(lambda: limit_set(1))
+        self.carre_site.toggled.connect(lambda: mode_set(1))
 
         self.carre_arete = QRadioButton("CARRÉ PAR ARÊTE")
-        self.carre_arete.toggled.connect(lambda: limit_set(2))
+        self.carre_arete.toggled.connect(lambda: mode_set(2))
 
         self.triangle_site = QRadioButton("TRIANGLE PAR SITE")
-        self.triangle_site.toggled.connect(lambda: limit_set(3))
+        self.triangle_site.toggled.connect(lambda: mode_set(3))
 
         self.triangle_arete = QRadioButton("TRIANGLE PAR ARÊTE")
-        self.triangle_arete.toggled.connect(lambda: limit_set(4))
+        self.triangle_arete.toggled.connect(lambda: mode_set(4))
 
         self.hexagone_site = QRadioButton("HEXAGONE PAR SITE")
-        self.hexagone_site.toggled.connect(lambda: limit_set(5))
+        self.hexagone_site.toggled.connect(lambda: mode_set(5))
 
         self.hexagone_arete = QRadioButton("HEXAGONE PAR ARÊTE")
-        self.hexagone_arete.toggled.connect(lambda: limit_set(6))
+        self.hexagone_arete.toggled.connect(lambda: mode_set(6))
 
         change_radio_style(self.carre_site)
         change_radio_style(self.carre_arete)
@@ -229,7 +268,7 @@ class TabSimulateur(QWidget):
         #Proba manuelle
         self.manual_input = QLineEdit()
         self.manual_input.setPlaceholderText("...")
-        self.manual_input.textEdited.connect(lambda: proba_set(float(self.manual_input.text())))
+        self.manual_input.textEdited.connect(lambda: proba_set(self.manual_input.text()))
 
         #Boutons de génération et affichage de grille et sa solution
         self.generate_button = QPushButton('Générer et afficher')
@@ -241,7 +280,7 @@ class TabSimulateur(QWidget):
         change_button_style(self.sol_display_button)
 
         self.generate_button.clicked.connect(
-            lambda: simu(self.limit_input, self.proba, self.number, self.width, self.color_close, self.color_open,
+            lambda: simu(self.mode, self.proba, self.number, self.width, self.color_close, self.color_open,
                          self.color_path))
         self.display_button.clicked.connect(lambda: display())
         self.sol_display_button.clicked.connect(lambda: sol_display())
@@ -345,15 +384,19 @@ class TabSimulateur(QWidget):
         self.show()
 
     #Fonctions externes
-    def change_proba(self, value):
+    def change_proba(self, value): #Change la probabilité, en la mettant bien avec une valeur à virgule entre 0 et 1
         self.proba_label.setText("Probabilité = " + str(value / 100))
         self.proba = value / 100
         print(self.proba)
 
-    def change_width(self, value):
+    def change_width(self, value): #Change la taille du graphe et peut changer la taille du trait dans les grandes grilles
         self.number_label.setText("Taille du graphe = " + str(value * 5))
         self.number = value * 5
         print(self.number)
+        if self.mode % 2 == 0 and self.number > 40:
+            self.width = 3
+        else:
+            self.width = 5
 
 
 """
